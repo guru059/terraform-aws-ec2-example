@@ -1,9 +1,6 @@
 Terraform Module to provision an EC2 Instance that is running Apache.
 Only for learning purposes and not intended for Production use
 
-Terraform Module to provision an EC2 Instance that is running Apache.
-Only for learning purposes and not intended for Production use
-
 ```hcl
 terraform {
     required_providers {
