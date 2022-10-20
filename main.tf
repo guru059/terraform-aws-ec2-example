@@ -1,44 +1,95 @@
-terraform {
-    required_providers {
+/*terraform {
+  backend "remote" {
+    organization = "terracert"
+
+    workspaces {
+      name = "provisioners"
+    }
+  }
+
+  required_providers {
       aws = {
         source = "hashicorp/aws"
         version = "4.31.0"
     }
   }
+}*/
+
+data "template_file" "user_data" {
+    template = file("${abspath(path.module)}/userdata.yaml")
 }
 
-provider "aws" {
-    profile = "default"
-    region  = "ap-south-1"
-    alias = "apsouth"
+data "template_file" "private_key" {
+    template = file("${abspath(path.module)}/id_rsa")
 }
 
-provider "aws" {
-    profile = "default"
-    region  = "us-west-1"
-    alias = "uswest"
-}
-
-data "aws_ami" "amz-linux-2" {
-    most_recent = true
-    owners = ["amazon"]
-    filter {
-      name = "owner-alias"
-      values = ["amazon"]
-    }
-    filter {
-      name = "name"
-      values = ["amzn2-ami-hvm*"]
-    }
+resource "aws_key_pair" "deployer" {
+  key_name   = "deployer-key"
+  public_key = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDJj8r0zTpqP4oV6yPHAOkIpJqZ+5YWk211vbqISV+1bao5sBvLtwDpoNV1KVD8MaxaoxEBrQ+ziXIsCXY9+toVnkv4ts3RlZji4rHou76AJFGRqna8qqkFjPhAPPbqHfECCO+FTBKc9X9iSYTScuav1xjZuCVSJI3J3izAKSZ+/RaSerULaaXxaTIS+xq45AXloJmj0XSG2w3sC88sjlsxV8L65STMYj01hp1hIshSgH99mjX1LoRmPk6yufcQRXBwPPiBPRIUFjmzG80HuxFP2hO3HzVpyZ6gZmlQwSxZYVKdMoxiLgWSgiQdt/5yf0n1RnqiuNzWftj3E/wwh87iXB/2G9D4DspuIGH5bB+CJ4CcxCWsQ/FZyJGpsNtB95VS3FAzeO7usT6Qa6SgxDapVGWRttrCzL2QZ9wwL/9VopocmXMJiGUCFJKxGrbLmKlVok7HoGJ+ihwSvATK7PJ9AP7FMzsyJ1vrdoudve4eYDSfIsmE/79n+tnWdjMBXkk= ubuntu@ip-172-31-47-41"
 }
 
 resource "aws_instance" "terratest" {
-    ami           = data.aws_ami.amz-linux-2.id
-    instance_type = "t2.micro"
-    provider = aws.apsouth
+#    ami           = "ami-06489866022e12a14"
+#    instance_type = "t2.micro"
+    ami = var.ami_id
+    instance_type = var.instance_type     
+    key_name = "${aws_key_pair.deployer.key_name}"
+    vpc_security_group_ids = [aws_security_group.web_sg.id]
+    user_data = data.template_file.user_data.rendered
+
     tags = {
-        Name = "TerraServer AP South"
-#        Region = "%{ if var.region == "apsouth"}${var.region}%{ else }${"Please set the correct region"}%{ endif }"
-        Region = "%{ if var.region == "apsouth"}${var.region}%{ endif }"
+        Name = "TerraServer"
+        Region = "ap-south-1"
+        Project = "2022-provisioners"
+        Target = "Time-EC2"
+        Tier = "Free"
+        Userdata = "Yes"
     }
+}
+
+data "aws_vpc" "main" {
+    id = "vpc-0ff2f60c97e722d6f"
+}
+resource "aws_security_group" "web_sg" {
+  name        = "Web Server SG"
+  description = "Allow HTTP & HTTPS Traffic"
+  vpc_id      = data.aws_vpc.main.id
+
+  ingress = [
+    {
+      description      = "HTTP"
+      from_port        = 80
+      to_port          = 80
+      protocol         = "tcp"
+      cidr_blocks      = ["0.0.0.0/0"]
+      ipv6_cidr_blocks = []
+      prefix_list_ids = []
+      security_groups = []
+      self = false
+
+    },
+    {
+      description      = "SSH"
+      from_port        = 22
+      to_port          = 22
+      protocol         = "tcp"
+      cidr_blocks      = ["0.0.0.0/0"]
+      ipv6_cidr_blocks = []
+      prefix_list_ids = []
+      security_groups = []
+      self = false
+    }
+  ]
+
+/*  egress = {
+    from_port        = 0
+    to_port          = 0
+    protocol         = "-1"
+    cidr_blocks      = ["0.0.0.0/0"]
+    ipv6_cidr_blocks = ["::/0"]
+  } */
+
+  tags = {
+    Name = "websg"
+  }
 }
